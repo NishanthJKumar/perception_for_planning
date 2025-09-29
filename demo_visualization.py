@@ -18,8 +18,7 @@ from utils import create_objects_from_detections
 from structs import ObjectType, Predicate
 
 
-def object_detection_demo():
-    """Run object detection and classify objects as movable or immovable."""
+def object_detection_demo() -> None:
     image_path = "gemini-test-img.png"
     
     if not os.path.exists(image_path):
@@ -40,7 +39,7 @@ def object_detection_demo():
     # 2. Run object detection and parse results
     print("Detecting objects...")
     response = detect_objects_with_bounding_boxes(client, image)
-    detection_results = parse_and_display_results(response, "bounding_boxes")
+    detection_results = parse_and_display_results(response)
     
     if not detection_results:
         print("No objects detected")
@@ -100,7 +99,7 @@ def object_detection_demo():
     
     print("Generating bounding box visualization with unique object IDs...")
     fig, ax = visualize_detections(
-        image, modified_detection_results, "bounding_boxes",
+        image, modified_detection_results,
         output_path="object_detection_with_unique_ids.png",
         show_plot=True
     )

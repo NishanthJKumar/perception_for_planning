@@ -1,28 +1,12 @@
-"""Utility functions for perception and planning."""
-from typing import List, Dict
 from structs import Object, ObjectType
 from query_gemini import extract_object_types_with_vlm
 
 
 def create_objects_from_detections(
-    detection_results: List[dict], 
-    object_types: Dict[str, ObjectType],
+    detection_results: list[dict], 
+    object_types: dict[str, ObjectType],
     client
-) -> List[Object]:
-    """
-    Create Object instances from Gemini detection results.
-    
-    Args:
-        detection_results: List of detection dictionaries from parse_and_display_results.
-                          Expected format: [{"box_2d": [...], "label": "object_name"}, ...]
-                          or [{"point": [...], "label": "object_name"}, ...]
-        object_types: Dictionary mapping object type names to ObjectType instances.
-                     e.g., {"cup": ObjectType("cup"), "table": ObjectType("table")}
-        client: Optional GenAI client for VLM-based type extraction. If None, uses labels directly.
-    
-    Returns:
-        List[Object]: List of Object instances created from the detection results.
-    """
+) -> list[Object]:
     objects = []
     
     # Extract all labels for batch processing with VLM if client provided
