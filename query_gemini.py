@@ -252,6 +252,114 @@ def parse_and_display_results(response_text, detection_type="bounding_boxes"):
         return None
 
 
+def translate_task_to_predicates(client, labeled_image_path, task_description, available_predicates, objects, model_id="gemini-robotics-er-1.5-preview"):
+    """
+    Use VLM to translate a natural language task description into grounded atoms.
+    
+    Args:
+        client: GenAI client instance
+        labeled_image_path: Path to the image with object ID labels
+        task_description: Natural language description of the task
+        available_predicates: List of Predicate instances available for use
+        objects: List of Object instances detected in the scene
+        model_id: Model ID to use for translation
+        
+    Returns:
+        List[Atom]: List of grounded atom instances representing the task goal
+    """
+    from structs import Atom
+    
+    # Create object reference string for the VLM
+    object_references = []
+    for obj in objects:
+        object_references.append(f"{obj.unique_id}: {obj.name} (type: {obj.type.name})")
+    object_ref_str = "\n".join(object_references)
+    
+    # Create predicate reference string
+    predicate_references = []
+    for pred in available_predicates:
+        arg_str = ", ".join([obj_type.name for obj_type in pred.arg_types])
+        predicate_references.append(f"{pred.name}({arg_str}): {pred.description}")
+    predicate_ref_str = "\n".join(predicate_references)
+    
+    prompt = f"""
+    You are viewing an image with labeled objects and need to translate a natural language task into formal predicates.
+    
+    TASK: {task_description}
+    
+    AVAILABLE OBJECTS (with their unique IDs visible in the image):
+    {object_ref_str}
+    
+    AVAILABLE PREDICATES:
+    {predicate_ref_str}
+    
+    Please analyze the task and return a JSON list of predicates that represent the goal state.
+    Each predicate should specify:
+    - "name": the predicate name
+    - "args": list of object unique_ids that should be arguments
+    """ + \
+    """    
+    For example, if the task is "put the red cup on the table" and you see objects "red_cup_000" and "wooden_table_001", you might return:
+    [{{"name": "on", "args": ["red_cup_000", "wooden_table_001"]}}]
+    
+    Look carefully at the labeled image to identify the specific objects mentioned in the task.
+    Only use object IDs that are visible in the image and predicate names from the available list.
+    
+    Return your response as a JSON array:
+    """
+    
+    try:
+        # Load the labeled image
+        if os.path.exists(labeled_image_path):
+            labeled_image = Image.open(labeled_image_path)
+        else:
+            raise FileNotFoundError(f"Labeled image not found: {labeled_image_path}")
+        
+        response = client.models.generate_content(
+            model=model_id,
+            contents=[labeled_image, prompt],
+            config=types.GenerateContentConfig(
+                temperature=0.1,  # Low temperature for consistency
+                thinking_config=types.ThinkingConfig(thinking_budget=0)
+            )
+        )
+        
+        # Clean and parse the response
+        cleaned_text = response.text.strip()
+        if cleaned_text.startswith('```json'):
+            cleaned_text = cleaned_text.replace('```json', '').replace('```', '')
+        elif cleaned_text.startswith('```'):
+            cleaned_text = cleaned_text.replace('```', '')
+        
+        predicate_specs = json.loads(cleaned_text)
+        
+        # Convert to grounded Atom objects
+        grounded_atoms = []
+        object_lookup = {obj.unique_id: obj for obj in objects}
+        
+        for spec in predicate_specs:
+            pred_name = spec.get('name', '')
+            arg_ids = spec.get('args', [])
+            
+            # Look up object instances
+            pred_objects = []
+            for arg_id in arg_ids:
+                if arg_id in object_lookup:
+                    pred_objects.append(object_lookup[arg_id])
+                else:
+                    print(f"Warning: Object ID '{arg_id}' not found in detected objects")
+            
+            if pred_objects:  # Only create atom if we found valid objects
+                grounded_atom = Atom(name=pred_name, object_args=pred_objects)
+                grounded_atoms.append(grounded_atom)
+        
+        return grounded_atoms
+        
+    except Exception as e:
+        print(f"Error translating task to predicates: {e}")
+        return []
+
+
 def visualize_detections(image, results, detection_type="bounding_boxes", output_path=None, show_plot=True):
     """
     Visualize detection results by overlaying bounding boxes or points on the image.
