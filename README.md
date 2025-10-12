@@ -25,6 +25,20 @@ export GOOGLE_API_KEY="your_gemini_api_key"  # Required
 export REPLICATE_API_TOKEN="your_replicate_token"  # For SAM-2 API
 ```
 
+## Setting up Replicate API (Recommended)
+
+Using Replicate API for SAM-2 segmentation is the easiest approach:
+
+1. Create a free account at [replicate.com](https://replicate.com/)
+2. Generate an API token from your account settings at https://replicate.com/account/api-tokens
+3. Set the environment variable: 
+   ```bash
+   export REPLICATE_API_TOKEN="r8_..."
+   ```
+4. Run the example with `--sam-mode replicate`
+
+Note: The free tier includes some credits; after that, there's a small per-API-call cost.
+
 ## Usage Examples
 
 ```bash
