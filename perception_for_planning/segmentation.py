@@ -304,11 +304,11 @@ def get_sam_client(
     try:
         # Import the appropriate client based on the mode
         if mode == "replicate":
-            from sam_replicate_client import ReplicateClient
+            from .sam_replicate_client import ReplicateClient
             client = ReplicateClient(api_token=api_token)
         else:
             # For local or remote modes
-            from sam_local_client import SAMClient
+            from .sam_local_client import SAMClient
             client = SAMClient(
                 mode=mode,
                 server_url=server_url,

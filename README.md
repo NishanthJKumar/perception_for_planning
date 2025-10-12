@@ -1,6 +1,9 @@
 # Perception for Planning
 
-Vision-language perception pipeline using Google's Gemini and Meta's SAM-2 for object detection, segmentation, and 3D mesh generation to support robot planning.
+A collection of useful perception utility functions that are useful for model-based planning.
+
+NOTE: this repo is currently under active development; specific functions/APIs and design patterns are likely to change!
+
 
 ## Key Features
 

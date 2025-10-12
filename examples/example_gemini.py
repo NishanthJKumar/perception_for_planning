@@ -27,9 +27,9 @@ import open3d as o3d
 from pathlib import Path
 from scipy.spatial import cKDTree  # For point cloud projection
 
-from gemini import setup_client, detect_bboxes, translate_task
-from visualization import visualize_detections, visualize_masks
-from segmentation import segment_table_with_ransac, segment_objects, segment_pointcloud_by_masks, save_meshes
+from perception_for_planning.gemini import setup_client, detect_bboxes, translate_task
+from perception_for_planning.visualization import visualize_detections, visualize_masks
+from perception_for_planning.segmentation import segment_table_with_ransac, segment_objects, segment_pointcloud_by_masks, save_meshes
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")

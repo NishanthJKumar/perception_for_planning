@@ -10,7 +10,7 @@ from google.genai import types
 from matplotlib import pyplot as plt, patches
 
 # Import the caching utility
-from gemini_cache import GeminiCache
+from .gemini_cache import GeminiCache
 
 
 @cache
