@@ -131,14 +131,11 @@ def segment_pointcloud_by_masks(
     """Segment pointcloud using object masks.
     
     Args:
-        xyz_world: Point cloud in world frame. Can be either:
-                  - (N, 3) flattened point cloud
-                  - (H, W, 3) structured point cloud matching the masks shape
-        rgb: RGB colors corresponding to the point cloud
+        xyz_world: Point cloud in world frame with shape (H, W, 3) matching the masks
+        rgb: RGB colors corresponding to the point cloud with shape (H, W, 3)
         masks: (num_objects, 1, H, W) segmentation masks from SAM
         bboxes: List of bbox dictionaries with 'label' and 'box_2d' keys
-        project_points: If True and xyz_world is flattened, will attempt to project
-                      points onto the image plane for segmentation
+        project_points: Unused parameter, kept for backward compatibility
     
     Returns:
         Dictionary mapping object labels to trimesh.Trimesh objects
@@ -146,28 +143,86 @@ def segment_pointcloud_by_masks(
     object_meshes = {}
     masks_2d = masks.squeeze(1).astype(bool)  # (num_objects, H, W)
     
-    # Check if we have a flattened pointcloud or one that matches the image structure
-    if len(xyz_world.shape) == 2:  # Flattened (N, 3)
-        _log.info(f"Working with flattened pointcloud of shape {xyz_world.shape}")
-        
-        # Create a simple box for each object as placeholder
-        # In a real implementation, you'd project the points onto the image to find correspondences
-        for bbox, mask_2d in zip(bboxes, masks_2d):
-            label = bbox["label"]
-            
-            # Create a placeholder box based on the bounding box dimensions
-            box_2d = bbox.get("box_2d", [])  # [ymin, xmin, ymax, xmax] normalized to 0-1000
-            if len(box_2d) == 4:
-                # Create a simple box mesh
-                mesh = trimesh.creation.box(extents=[0.1, 0.1, 0.1])
-                mesh.metadata = {'name': label}
-                mesh.visual.face_colors = np.random.randint(0, 255, size=4).astype(np.uint8)
-                object_meshes[label] = mesh
-                _log.info(f"Created placeholder mesh for {label}")
-            
-        return object_meshes
+    # Check that we have a structured pointcloud
+    if len(xyz_world.shape) != 3 or xyz_world.shape[2] != 3:
+        raise ValueError(f"Expected structured pointcloud with shape (H, W, 3), got {xyz_world.shape}. " 
+                         f"Flattened pointclouds are not supported as they cannot be directly masked.")
     
-    # If we have a structured pointcloud that matches the masks
+    # Handle case where we have more masks than bounding boxes
+    if masks.shape[0] > len(bboxes):
+        _log.warning(f"More masks ({masks.shape[0]}) than bounding boxes ({len(bboxes)}). "
+                    f"Selecting best masks for each bbox based on IoU.")
+        
+        # Extract 2D bounding boxes from the detection results
+        bbox_coords = []
+        for bbox in bboxes:
+            # Extract coordinates from the box_2d field
+            if "box_2d" in bbox and len(bbox["box_2d"]) == 4:
+                # Assuming box_2d is [ymin, xmin, ymax, xmax] normalized to 0-1000
+                ymin, xmin, ymax, xmax = bbox["box_2d"]
+                # Convert to image coordinates based on mask dimensions
+                h, w = masks.shape[2:]
+                x_min = int((xmin / 1000.0) * w)
+                y_min = int((ymin / 1000.0) * h)
+                x_max = int((xmax / 1000.0) * w)
+                y_max = int((ymax / 1000.0) * h)
+                bbox_coords.append([x_min, y_min, x_max, y_max])
+            else:
+                # If bbox format is invalid, use a dummy bbox
+                _log.warning(f"Invalid bbox format for {bbox.get('label', 'unknown')}")
+                bbox_coords.append([0, 0, 10, 10])  # Small dummy box to ensure lowest IoU
+        
+        # Calculate IoU between each mask and each bbox to find best matches
+        best_mask_indices = []
+        
+        for bbox_idx, bbox_coord in enumerate(bbox_coords):
+            x_min, y_min, x_max, y_max = bbox_coord
+            # Create a binary mask for the bbox
+            bbox_mask = np.zeros((masks.shape[2], masks.shape[3]), dtype=bool)
+            bbox_mask[y_min:y_max, x_min:x_max] = True
+            
+            # Calculate IoU for each mask with this bbox
+            best_iou = -1
+            best_idx = -1
+            
+            for mask_idx, mask in enumerate(masks_2d):
+                # Skip if this mask has already been assigned
+                if mask_idx in best_mask_indices:
+                    continue
+                
+                # Calculate intersection and union
+                intersection = np.logical_and(mask, bbox_mask).sum()
+                union = np.logical_or(mask, bbox_mask).sum()
+                iou = intersection / union if union > 0 else 0
+                
+                # Update if better IoU is found
+                if iou > best_iou:
+                    best_iou = iou
+                    best_idx = mask_idx
+            
+            if best_idx >= 0:
+                best_mask_indices.append(best_idx)
+            else:
+                # If no good match is found (all masks already assigned),
+                # use any unassigned mask
+                remaining_indices = [i for i in range(len(masks_2d)) if i not in best_mask_indices]
+                if remaining_indices:
+                    best_mask_indices.append(remaining_indices[0])
+                else:
+                    # No masks left - this should not happen with more masks than boxes
+                    _log.warning(f"No mask available for bbox {bbox_idx}")
+                    best_mask_indices.append(0)  # Use first mask as fallback
+        
+        _log.info(f"Selected mask indices {best_mask_indices} for {len(bboxes)} bounding boxes")
+        
+        # Create a new masks array with just the selected masks
+        selected_masks = np.zeros((len(best_mask_indices), 1, masks.shape[2], masks.shape[3]), dtype=masks.dtype)
+        for i, idx in enumerate(best_mask_indices):
+            selected_masks[i, 0] = masks[idx, 0]
+        masks = selected_masks
+        masks_2d = masks.squeeze(1).astype(bool)  # Update masks_2d with selected masks
+    
+    # Process each mask and create a mesh for each object
     for mask_2d, bbox in zip(masks_2d, bboxes):
         label = bbox["label"]
 
@@ -231,29 +286,35 @@ def get_sam_client(
     mode="local", 
     server_url=None, 
     checkpoint=None, 
-    model_type="vit_h"
+    model_type="vit_h",
+    api_token=None
 ):
     """Get a SAM client for segmentation.
     
     Args:
-        mode: Either "local" or "remote"
+        mode: One of "local", "remote", or "replicate"
         server_url: URL of the SAM server if mode is "remote"
         checkpoint: Path to SAM checkpoint if mode is "local"
         model_type: SAM model type if mode is "local"
+        api_token: Replicate API token if mode is "replicate"
         
     Returns:
         A configured SAM client
     """
     try:
-        # Import here to allow segmentation.py to work without sam_client dependency
-        from sam_client import SAMClient
-        
-        client = SAMClient(
-            mode=mode,
-            server_url=server_url,
-            checkpoint=checkpoint,
-            model_type=model_type
-        )
+        # Import the appropriate client based on the mode
+        if mode == "replicate":
+            from sam_replicate_client import ReplicateClient
+            client = ReplicateClient(api_token=api_token)
+        else:
+            # For local or remote modes
+            from sam_local_client import SAMClient
+            client = SAMClient(
+                mode=mode,
+                server_url=server_url,
+                checkpoint=checkpoint,
+                model_type=model_type
+            )
         return client
     except ImportError:
         _log.error("SAM client not available. Make sure sam_client.py is in the same directory.")
@@ -295,16 +356,18 @@ def segment_objects(
     detection_results: list[dict], 
     sam_mode: str = "local", 
     sam_server_url: str = None,
-    sam_checkpoint: str = None
+    sam_checkpoint: str = None,
+    replicate_api_token: str = None
 ) -> np.ndarray:
     """Segment objects using SAM given bounding boxes from Gemini.
     
     Args:
         rgb_pil: PIL Image to segment
         detection_results: List of detection dictionaries from Gemini
-        sam_mode: Either "local" or "remote"
+        sam_mode: One of "local", "remote", or "replicate"
         sam_server_url: URL of SAM server if mode is "remote"
         sam_checkpoint: Path to SAM checkpoint if mode is "local"
+        replicate_api_token: Replicate API token if mode is "replicate"
         
     Returns:
         Array of segmentation masks
@@ -313,7 +376,8 @@ def segment_objects(
     client = get_sam_client(
         mode=sam_mode, 
         server_url=sam_server_url,
-        checkpoint=sam_checkpoint
+        checkpoint=sam_checkpoint,
+        api_token=replicate_api_token
     )
 
     # Convert bounding boxes to SAM format
@@ -336,5 +400,8 @@ def segment_objects(
     # Predict masks for all boxes
     _log.info(f"Segmenting {len(boxes)} objects using SAM in {sam_mode} mode")
     masks, scores = client.segment(rgb_pil, boxes)
-    _log.info(f"Generated {len(masks)} segmentation masks. Mask shape: {masks.shape}")  # (num_objects, 1, H, W)
+    _log.info(f"Generated {len(masks)} segmentation masks. Mask shape: {masks.shape}")  # (num_masks, 1, H, W)
+    
+    # Note: masks may contain more masks than the number of boxes
+    # The segment_pointcloud_by_masks function will handle matching masks to boxes
     return masks

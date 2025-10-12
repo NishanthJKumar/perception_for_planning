@@ -47,17 +47,25 @@ setup(
         # Image processing
         "Pillow>=9.0.0",
         
-        # JSON handling and utilities
+        # HTTP requests and utilities
         "requests>=2.25.0",
         
-        # Optional: For more advanced image processing
+        # Numerical and scientific computing
         "numpy>=1.21.0",
+        "scipy>=1.6.0",
         
-        # Optional: For visualization (if needed later)
+        # Visualization
         "matplotlib>=3.5.0",
+        "supervision>=0.17.0",  # For segmentation visualization
         
-        # Optional: For OpenCV integration (if needed)
-        # "opencv-python>=4.5.0",
+        # 3D processing
+        "open3d>=0.16.0",       # Point cloud processing
+        "trimesh>=3.9.0",       # 3D mesh handling
+        
+        # API integrations
+        "replicate>=0.18.0",    # For SAM-2 via Replicate API
+
+        "segment-anything>=1.0",
     ],
     extras_require={
     },

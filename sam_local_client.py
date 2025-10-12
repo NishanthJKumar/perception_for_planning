@@ -16,20 +16,27 @@ from PIL import Image
 from typing import Dict, List, Optional, Tuple, Union
 from functools import cache
 
+# Import Replicate client for API-based segmentation
+try:
+    from sam_replicate_client import ReplicateClient
+except ImportError:
+    ReplicateClient = None
+
 # Configure logging
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
 _log = logging.getLogger(__name__)
 
 
 class SAMClient:
-    """SAM client that can operate in either local or remote mode."""
+    """SAM client that can operate in local, remote, or replicate API mode."""
     
-    def __init__(self, mode: str = "local", server_url: str = None, **kwargs):
+    def __init__(self, mode: str = "local", server_url: str = None, api_token: str = None, **kwargs):
         """Initialize the SAM client.
         
         Args:
-            mode: Either "local" or "remote"
+            mode: One of "local", "remote", or "replicate"
             server_url: URL of the SAM server (required for remote mode)
+            api_token: Replicate API token (required for replicate mode)
             **kwargs: Additional arguments for local mode
         """
         self.mode = mode
@@ -47,11 +54,18 @@ class SAMClient:
                 _log.info("Successfully connected to SAM server")
             except Exception as e:
                 _log.warning(f"Failed to connect to SAM server: {e}")
+        
+        elif mode == "replicate":
+            if ReplicateClient is None:
+                raise ImportError("ReplicateClient not found. Make sure replicate_client.py is in your path.")
+            _log.info("Initializing Replicate API client for SAM-2")
+            self.predictor = ReplicateClient(api_token)
+            _log.info("Successfully initialized Replicate API client")
                 
         elif mode == "local":
             self._init_local_predictor(**kwargs)
         else:
-            raise ValueError(f"Invalid mode: {mode}. Must be 'local' or 'remote'")
+            raise ValueError(f"Invalid mode: {mode}. Must be 'local', 'remote', or 'replicate'")
     
     def _init_local_predictor(self, checkpoint=None, model_type="vit_h", device=None):
         """Initialize a local SAM predictor."""
@@ -103,11 +117,17 @@ class SAMClient:
             
         Returns:
             Tuple of (masks, scores)
-            - masks: Array of shape (N, 1, H, W)
-            - scores: Array of shape (N, 1)
+            - masks: Array of shape (M, 1, H, W) where M may be greater than or equal to N
+            - scores: Array of shape (M, 1)
+            
+        Note: 
+            The function may return more masks than the number of input boxes.
+            In this case, the caller is responsible for matching masks to boxes.
         """
         if self.mode == "remote":
             return self._segment_remote(image, boxes)
+        elif self.mode == "replicate":
+            return self.predictor.segment(image, boxes)
         else:
             return self._segment_local(image, boxes)
     
@@ -186,11 +206,23 @@ class SAMClient:
 
 
 @cache
-def get_sam_client(mode="local", server_url=None, checkpoint=None, model_type="vit_h"):
-    """Get a cached SAM client instance."""
+def get_sam_client(mode="local", server_url=None, checkpoint=None, model_type="vit_h", api_token=None):
+    """Get a cached SAM client instance.
+    
+    Args:
+        mode: One of "local", "remote", or "replicate"
+        server_url: URL of the SAM server (required for remote mode)
+        checkpoint: Path to SAM checkpoint (required for local mode)
+        model_type: SAM model type if mode is "local"
+        api_token: Replicate API token (required for replicate mode)
+        
+    Returns:
+        A configured SAM client
+    """
     return SAMClient(
         mode=mode, 
         server_url=server_url, 
         checkpoint=checkpoint,
-        model_type=model_type
+        model_type=model_type,
+        api_token=api_token
     )

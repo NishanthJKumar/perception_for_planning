@@ -1,50 +1,50 @@
 # Perception for Planning
 
-Object detection and spatial reasoning using Google's Gemini Robotics-ER 1.5 model.
+Vision-language perception pipeline using Google's Gemini and Meta's SAM-2 for object detection, segmentation, and 3D mesh generation to support robot planning.
 
-## Features
+## Key Features
 
-- Object detection using Gemini Vision API
-- Instance segmentation using SAM2 (optional)
-- 3D table segmentation using RANSAC
-- 3D object mesh creation using convex hull
-- Task-oriented goal predicate generation
+- Object detection with Gemini Vision API
+- Instance segmentation with SAM-2
+- 3D object mesh generation via convex hull
+- Automatic task planning from natural language
 
-## Installation
+## Quick Start
 
 ```bash
+# Install
 git clone https://github.com/NishanthJKumar/perception_for_planning.git
 cd perception_for_planning
 pip install -e .
+
+# Set API keys
+export GOOGLE_API_KEY="your_gemini_api_key"  # Required
+export REPLICATE_API_TOKEN="your_replicate_token"  # For SAM-2 API
 ```
 
-### Dependencies
-
-- Required:
-  - numpy
-  - open3d
-  - pillow
-  - google-generativeai
-  - trimesh (for 3D mesh handling)
-  
-- Optional:
-  - SAM2 (for segmentation)
-  - curobo (for robotics planning)
-
-## Setup
-
-1. Get a Google API key from [Google AI Studio](https://aistudio.google.com/apikey)
-2. Set your API key:
-   ```bash
-   export GOOGLE_API_KEY="your_api_key_here"
-   ```
-
-## Usage
-
-Place an image named `gemini-test-img.png` in the project directory and run:
+## Usage Examples
 
 ```bash
-python demo_visualization.py
+# Using local SAM model
+python example_gemini.py --sam-mode local --sam-checkpoint /path/to/sam_vit_h.pth
+
+# Using remote SAM server
+python example_gemini.py --sam-mode remote --sam-server http://localhost:8000
+
+# Using Replicate API for SAM-2 (easiest)
+python example_gemini.py --sam-mode replicate
+
+# Specify a custom task for planning
+python example_gemini.py --task "Place the red cube on top of the blue box"
+
+# Disable API call caching
+python example_gemini.py --no-cache
 ```
 
-This will detect objects, classify them as movable/immovable, and generate visualizations with unique object IDs.
+## Output
+
+The pipeline generates:
+- Detection visualizations (`output/detection_results.png`)
+- Segmentation masks (`output/segmentation_results.png`)
+- 3D object meshes (`output/meshes/`)
+- Task planning predicates from natural language
