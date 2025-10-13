@@ -47,16 +47,22 @@ async def lifespan(app: FastAPI):
         
         if not model_path or not os.path.exists(model_path):
             raise ValueError(f"SAM2 checkpoint not found: {model_path}")
-        if not model_cfg or not os.path.exists(model_cfg):
-            raise ValueError(f"SAM2 config not found: {model_cfg}")
-            
-        _log.info(f"Using SAM2 model from {model_path}")
         
-        device = "cuda" if os.environ.get("CUDA_VISIBLE_DEVICES") else "cpu"
+        # For SAM2, the config should be just the config name (e.g., "sam2.1_hiera_l")
+        # not a file path. Extract the name without .yaml extension if provided.
+        if model_cfg.endswith('.yaml'):
+            model_cfg = os.path.splitext(os.path.basename(model_cfg))[0]
+        
+        _log.info(f"Using SAM2 model from {model_path}")
+        _log.info(f"Using SAM2 config: {model_cfg}")
+        
+        device = "cuda" if torch.cuda.is_available() else "cpu"
+        _log.info(f"Using device: {device}")
         
         # Build SAM2 model with checkpoint and config
-        # SAM2 uses build_sam2(config, checkpoint, device) API
-        _log.info(f"Building SAM2 model with config={model_cfg}, device={device}")
+        # SAM2 uses build_sam2(config_name, checkpoint, device) API
+        # The config_name should be just the name (e.g., "sam2.1_hiera_l"), not a path
+        _log.info(f"Building SAM2 model with config={model_cfg}, checkpoint={model_path}, device={device}")
         sam_model = build_sam2(model_cfg, model_path, device=device)
         sam_predictor = SAM2ImagePredictor(sam_model)
         _log.info("SAM2 model loaded successfully")
@@ -156,7 +162,12 @@ def main():
     parser.add_argument("--port", type=int, default=8000, help="Port to run the server on")
     parser.add_argument("--host", type=str, default="0.0.0.0", help="Host to bind to")
     parser.add_argument("--checkpoint", type=str, required=True, help="Path to SAM2 checkpoint")
-    parser.add_argument("--config", type=str, required=True, help="Path to SAM2 config")
+    parser.add_argument(
+        "--config", 
+        type=str, 
+        required=True, 
+        help="SAM2 config name (e.g., 'sam2.1_hiera_l', 'sam2.1_hiera_b', 'sam2.1_hiera_s', 'sam2.1_hiera_t')"
+    )
     args = parser.parse_args()
     
     # Set environment variables for model loading
