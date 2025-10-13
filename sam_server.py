@@ -1,10 +1,12 @@
 #!/usr/bin/env python3
 """
-SAM Server for remote segmentation.
+SAM2 Server for remote segmentation.
 
-This script sets up a FastAPI server that exposes SAM2 (Segment Anything Model v2) functionality
+This script sets up a FastAPI server that exposes SAM2 (Segment Anything Model) functionality
 as an API endpoint. This allows segmentation to run on a separate machine (potentially with
 better GPU resources) while the main application runs elsewhere.
+
+The server supports different versions of SAM2 based on the provided checkpoint and configuration.
 """
 
 import argparse
@@ -28,9 +30,9 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(level
 _log = logging.getLogger(__name__)
 
 # Create FastAPI app
-app = FastAPI(title="SAM Segmentation Server", description="Remote segmentation using SAM")
+app = FastAPI(title="SAM2 Segmentation Server", description="Remote segmentation using SAM2")
 
-# Global SAM model
+# Global SAM2 model
 sam_predictor = None
 
 def load_model_checkpoint(checkpoint_path):
@@ -84,7 +86,8 @@ async def startup_event():
         device = "cuda" if os.environ.get("CUDA_VISIBLE_DEVICES") else "cpu"
         
         # Build and load the SAM2 model
-        sam_model = build_sam(model_cfg, checkpoint=None, device=device)
+        # The build_sam function expects only the config file, we'll load the state dict manually
+        sam_model = build_sam(model_cfg, device=device)
         # Load state dict after model is created
         sam_model.load_state_dict(state_dict)
         sam_predictor = SamPredictor(sam_model)
