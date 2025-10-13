@@ -20,8 +20,8 @@ from PIL import Image
 from typing import List
 from pydantic import BaseModel
 # Import SAM2 from the correct location
-from segment_anything.sam2.build_sam import build_sam2
-from segment_anything.sam2.predictor import SAM2ImagePredictor
+from segment_anything import build_sam
+from segment_anything.predictor import SAMPredictor
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
@@ -84,10 +84,10 @@ async def startup_event():
         device = "cuda" if os.environ.get("CUDA_VISIBLE_DEVICES") else "cpu"
         
         # Build and load the SAM2 model
-        sam_model = build_sam2(model_cfg, checkpoint=None, device=device)
+        sam_model = build_sam(model_cfg, checkpoint=None, device=device)
         # Load state dict after model is created
         sam_model.load_state_dict(state_dict)
-        sam_predictor = SAM2ImagePredictor(sam_model)
+        sam_predictor = SAMPredictor(sam_model)
         _log.info("SAM2 model loaded successfully")
             
     except Exception as e:
