@@ -21,7 +21,7 @@ from typing import List
 from pydantic import BaseModel
 # Import SAM2 from the correct location
 from segment_anything import build_sam
-from segment_anything.predictor import SAMPredictor
+from segment_anything.predictor import SamPredictor
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
@@ -87,9 +87,9 @@ async def startup_event():
         sam_model = build_sam(model_cfg, checkpoint=None, device=device)
         # Load state dict after model is created
         sam_model.load_state_dict(state_dict)
-        sam_predictor = SAMPredictor(sam_model)
+        sam_predictor = SamPredictor(sam_model)
         _log.info("SAM2 model loaded successfully")
-            
+
     except Exception as e:
         _log.error(f"Failed to load SAM2 model: {e}")
         _log.error(f"Error details: {str(e)}")
