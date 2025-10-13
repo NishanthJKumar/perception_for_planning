@@ -48,13 +48,19 @@ async def lifespan(app: FastAPI):
         if not model_path or not os.path.exists(model_path):
             raise ValueError(f"SAM2 checkpoint not found: {model_path}")
         
-        # For SAM2, the config should be in format "sam2.1/sam2.1_hiera_l" (without .yaml)
-        # If a full path is provided, extract just the relevant parts
+        # For SAM2, the config should be in format "configs/sam2.1/sam2.1_hiera_l" (without .yaml)
+        # Hydra searches relative to the sam2 package root, so we need "configs/" prefix
         if model_cfg.endswith('.yaml'):
             model_cfg = model_cfg[:-5]  # Remove .yaml extension
-        # If it's just the filename without directory, add the sam2.1/ prefix
-        if '/' not in model_cfg and not model_cfg.startswith('sam2'):
-            model_cfg = f"sam2.1/{model_cfg}"
+        # If it doesn't start with "configs/", add it
+        if not model_cfg.startswith('configs/'):
+            # Handle both "sam2.1/sam2.1_hiera_l" and just "sam2.1_hiera_l"
+            if '/' not in model_cfg:
+                # Just filename, assume sam2.1
+                model_cfg = f"configs/sam2.1/{model_cfg}"
+            else:
+                # Has directory like "sam2.1/sam2.1_hiera_l"
+                model_cfg = f"configs/{model_cfg}"
         
         _log.info(f"Using SAM2 model from {model_path}")
         _log.info(f"Using SAM2 config: {model_cfg}")
@@ -169,7 +175,7 @@ def main():
         "--config", 
         type=str, 
         required=True, 
-        help="SAM2 config name (e.g., 'sam2.1/sam2.1_hiera_l', 'sam2.1/sam2.1_hiera_b', 'sam2.1/sam2.1_hiera_s', 'sam2.1/sam2.1_hiera_t')"
+        help="SAM2 config name (e.g., 'sam2.1_hiera_l', 'sam2.1_hiera_b', 'sam2.1_hiera_s', 'sam2.1_hiera_t' or full path like 'configs/sam2.1/sam2.1_hiera_l')"
     )
     args = parser.parse_args()
     
