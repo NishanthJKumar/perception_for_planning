@@ -5,10 +5,6 @@ SAM Server for remote segmentation.
 This script sets up a FastAPI server that exposes SAM2 (Segment Anything Model v2) functionality
 as an API endpoint. This allows segmentation to run on a separate machine (potentially with
 better GPU resources) while the main application runs elsewhere.
-
-Usage:
-    # Start the server
-    python sam_server.py --port 8000 --checkpoint /path/to/sam2_model.pth --config /path/to/sam2_config.yaml
 """
 
 import argparse
@@ -23,8 +19,9 @@ from fastapi import FastAPI, HTTPException
 from PIL import Image
 from typing import List
 from pydantic import BaseModel
-from segment_anything.build_sam import build_sam2
-from segment_anything import SAM2ImagePredictor
+# Import SAM2 from the correct location
+from segment_anything.sam2.build_sam import build_sam2
+from segment_anything.sam2.predictor import SAM2ImagePredictor
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
@@ -85,6 +82,8 @@ async def startup_event():
         # Preprocess the checkpoint first
         state_dict = load_model_checkpoint(model_path)
         device = "cuda" if os.environ.get("CUDA_VISIBLE_DEVICES") else "cpu"
+        
+        # Build and load the SAM2 model
         sam_model = build_sam2(model_cfg, checkpoint=None, device=device)
         # Load state dict after model is created
         sam_model.load_state_dict(state_dict)
@@ -93,6 +92,9 @@ async def startup_event():
             
     except Exception as e:
         _log.error(f"Failed to load SAM2 model: {e}")
+        _log.error(f"Error details: {str(e)}")
+        import traceback
+        _log.error(traceback.format_exc())
         raise
 
 
