@@ -18,6 +18,8 @@ NOTE: this repo is currently under active development; specific functions/APIs a
 # Install
 git clone https://github.com/NishanthJKumar/perception_for_planning.git
 cd perception_for_planning
+# Preferably, create a new python environment (e.g. uv, conda) before
+# installing this!
 pip install -e .
 
 # Set API keys
