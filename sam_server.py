@@ -158,7 +158,10 @@ async def segment(request: SegmentationRequest) -> SegmentationResponse:
                 batch_encoded.append(base64.b64encode(mask_bytes.read()).decode())
             encoded_masks.append(batch_encoded)
         
-        return SegmentationResponse(masks=encoded_masks, scores=scores.tolist())
+        # Flatten scores if they have an extra dimension (N, 1) -> (N,)
+        scores_flat = scores.flatten().tolist() if scores.ndim > 1 else scores.tolist()
+        
+        return SegmentationResponse(masks=encoded_masks, scores=scores_flat)
         
     except Exception as e:
         _log.error(f"Segmentation failed: {e}")
