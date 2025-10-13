@@ -48,10 +48,13 @@ async def lifespan(app: FastAPI):
         if not model_path or not os.path.exists(model_path):
             raise ValueError(f"SAM2 checkpoint not found: {model_path}")
         
-        # For SAM2, the config should be just the config name (e.g., "sam2.1_hiera_l")
-        # not a file path. Extract the name without .yaml extension if provided.
+        # For SAM2, the config should be in format "sam2.1/sam2.1_hiera_l" (without .yaml)
+        # If a full path is provided, extract just the relevant parts
         if model_cfg.endswith('.yaml'):
-            model_cfg = os.path.splitext(os.path.basename(model_cfg))[0]
+            model_cfg = model_cfg[:-5]  # Remove .yaml extension
+        # If it's just the filename without directory, add the sam2.1/ prefix
+        if '/' not in model_cfg and not model_cfg.startswith('sam2'):
+            model_cfg = f"sam2.1/{model_cfg}"
         
         _log.info(f"Using SAM2 model from {model_path}")
         _log.info(f"Using SAM2 config: {model_cfg}")
@@ -166,7 +169,7 @@ def main():
         "--config", 
         type=str, 
         required=True, 
-        help="SAM2 config name (e.g., 'sam2.1_hiera_l', 'sam2.1_hiera_b', 'sam2.1_hiera_s', 'sam2.1_hiera_t')"
+        help="SAM2 config name (e.g., 'sam2.1/sam2.1_hiera_l', 'sam2.1/sam2.1_hiera_b', 'sam2.1/sam2.1_hiera_s', 'sam2.1/sam2.1_hiera_t')"
     )
     args = parser.parse_args()
     
