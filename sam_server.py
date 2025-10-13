@@ -17,57 +17,27 @@ import numpy as np
 import os
 import torch
 import uvicorn
+from contextlib import asynccontextmanager
 from fastapi import FastAPI, HTTPException
 from PIL import Image
 from typing import List
 from pydantic import BaseModel
 # Import SAM2 from the correct location
-from segment_anything import build_sam
-from segment_anything.predictor import SamPredictor
+from sam2.build_sam import build_sam2
+from sam2.sam2_image_predictor import SAM2ImagePredictor
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
 _log = logging.getLogger(__name__)
 
-# Create FastAPI app
-app = FastAPI(title="SAM2 Segmentation Server", description="Remote segmentation using SAM2")
-
 # Global SAM2 model
 sam_predictor = None
 
-def load_model_checkpoint(checkpoint_path):
-    """
-    Load and preprocess model checkpoint to handle different formats.
-    
-    Some checkpoints have the weights inside a 'model' key, others have them directly
-    in the state dict. This function handles both cases.
-    """
-    _log.info(f"Loading checkpoint from {checkpoint_path}")
-    state_dict = torch.load(checkpoint_path, map_location="cpu")
-    
-    # If the checkpoint has a 'model' key, extract the nested state dict
-    if "model" in state_dict:
-        _log.info("Found 'model' key in checkpoint, extracting nested state dict")
-        state_dict = state_dict["model"]
-    
-    return state_dict
 
-
-class SegmentationRequest(BaseModel):
-    """Request model for segmentation API."""
-    image_base64: str
-    boxes: List[List[float]]  # List of [x0, y0, x1, y1] boxes in pixel coordinates
-
-
-class SegmentationResponse(BaseModel):
-    """Response model for segmentation API."""
-    masks: List[List[str]]  # Base64-encoded binary masks
-    scores: List[float]
-
-
-@app.on_event("startup")
-async def startup_event():
-    """Load SAM2 model on server startup."""
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Lifespan event handler for startup and shutdown."""
+    # Startup
     global sam_predictor
     try:
         _log.info("Loading SAM2 predictor...")
@@ -81,16 +51,14 @@ async def startup_event():
             raise ValueError(f"SAM2 config not found: {model_cfg}")
             
         _log.info(f"Using SAM2 model from {model_path}")
-        # Preprocess the checkpoint first
-        state_dict = load_model_checkpoint(model_path)
+        
         device = "cuda" if os.environ.get("CUDA_VISIBLE_DEVICES") else "cpu"
         
-        # Build and load the SAM2 model
-        # The build_sam function expects only the config file, we'll load the state dict manually
-        sam_model = build_sam(model_cfg, device=device)
-        # Load state dict after model is created
-        sam_model.load_state_dict(state_dict)
-        sam_predictor = SamPredictor(sam_model)
+        # Build SAM2 model with checkpoint and config
+        # SAM2 uses build_sam2(config, checkpoint, device) API
+        _log.info(f"Building SAM2 model with config={model_cfg}, device={device}")
+        sam_model = build_sam2(model_cfg, model_path, device=device)
+        sam_predictor = SAM2ImagePredictor(sam_model)
         _log.info("SAM2 model loaded successfully")
 
     except Exception as e:
@@ -99,6 +67,33 @@ async def startup_event():
         import traceback
         _log.error(traceback.format_exc())
         raise
+    
+    yield
+    
+    # Shutdown (cleanup if needed)
+    _log.info("Shutting down SAM2 server")
+
+
+# Create FastAPI app with lifespan handler
+app = FastAPI(
+    title="SAM2 Segmentation Server",
+    description="Remote segmentation using SAM2",
+    lifespan=lifespan
+)
+
+
+
+
+class SegmentationRequest(BaseModel):
+    """Request model for segmentation API."""
+    image_base64: str
+    boxes: List[List[float]]  # List of [x0, y0, x1, y1] boxes in pixel coordinates
+
+
+class SegmentationResponse(BaseModel):
+    """Response model for segmentation API."""
+    masks: List[List[str]]  # Base64-encoded binary masks
+    scores: List[float]
 
 
 @app.get("/health")
