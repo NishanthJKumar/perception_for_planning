@@ -27,7 +27,7 @@ import open3d as o3d
 from pathlib import Path
 from scipy.spatial import cKDTree  # For point cloud projection
 
-from perception_for_planning.gemini import setup_client, detect_bboxes, translate_task
+from perception_for_planning.gemini import setup_client, detect_bboxes, translate_task, detect_and_translate
 from perception_for_planning.visualization import visualize_detections, visualize_masks
 from perception_for_planning.segmentation import segment_table_with_ransac, segment_objects, segment_pointcloud_by_masks, save_meshes
 
@@ -54,7 +54,8 @@ def main(
     sam_mode="local",
     sam_server_url=None,
     sam_checkpoint=None,
-    replicate_api_token=None
+    replicate_api_token=None,
+    use_combined_api=True
 ):
     """Run the perception pipeline.
     
@@ -65,6 +66,7 @@ def main(
         sam_server_url: URL of SAM server (for remote mode)
         sam_checkpoint: Path to SAM checkpoint (for local mode)
         replicate_api_token: Replicate API token (for replicate mode)
+        use_combined_api: Whether to use the combined detect_and_translate function (True) or separate calls (False)
     """
     # 1. Load RGB image, depth image, and pointcloud
     _log.info(f"Loading data from {DATA_DIR}")
@@ -80,12 +82,28 @@ def main(
     
     _log.info(f"Loaded RGB image: {rgb_np.shape}, depth image: {depth_np.shape}, pointcloud: {xyz.shape}")
 
-    # 2. Run object detection using Gemini Vision API
     cache_status = "enabled" if use_cache else "disabled"
-    _log.info(f"Running object detection with Gemini Vision API (cache {cache_status})")
     client = setup_client()
-    detection_results = detect_bboxes(rgb_img, client, use_cache=use_cache)
-    _log.info(f"Detected {len(detection_results)} objects")
+    
+    if use_combined_api:
+        # NEW: Use combined API call for both detection and translation
+        _log.info(f"Running combined detection and translation with Gemini Vision API (cache {cache_status})")
+        _log.info(f"Task instruction: '{task_instruction}'")
+        detection_results, predicates = detect_and_translate(
+            rgb_img, 
+            task_instruction, 
+            client, 
+            use_cache=use_cache
+        )
+        _log.info(f"Detected {len(detection_results)} objects and generated {len(predicates)} predicates in single API call")
+    else:
+        # ORIGINAL: Separate API calls for detection and translation
+        # 2. Run object detection using Gemini Vision API
+        _log.info(f"Running object detection with Gemini Vision API (cache {cache_status})")
+        detection_results = detect_bboxes(rgb_img, client, use_cache=use_cache)
+        _log.info(f"Detected {len(detection_results)} objects")
+        # Note: predicates will be generated later in step 6
+        predicates = None
 
     # 3. Visualize detection results
     _log.info(f"Visualizing detection results to {BBOX_VIZ_PATH}")
@@ -224,15 +242,20 @@ def main(
     _log.info(f"Saved all meshes to {MESH_DIR}")
     
     # 6. Generate goal predicates from a natural language instruction
-    cache_status = "enabled" if use_cache else "disabled"
-    _log.info(f"Generating goal predicates for task: '{task_instruction}' (cache {cache_status})")
-    predicates = translate_task(task_instruction, detection_results, str(BBOX_VIZ_PATH), use_cache=use_cache)
+    if not use_combined_api:
+        # ORIGINAL: Separate API call for translation (only if not already done)
+        cache_status = "enabled" if use_cache else "disabled"
+        _log.info(f"Generating goal predicates for task: '{task_instruction}' (cache {cache_status})")
+        predicates = translate_task(task_instruction, detection_results, str(BBOX_VIZ_PATH), use_cache=use_cache)
+    
+    # Log the predicates (whether from combined or separate call)
     _log.info(f"Generated {len(predicates)} goal predicates:")
     for p in predicates:
         _log.info(f"  - {p['predicate']}({', '.join(p['args'])})")
     
     # Done!
-    _log.info("Perception pipeline completed successfully!")
+    pipeline_mode = "combined API" if use_combined_api else "separate API calls"
+    _log.info(f"Perception pipeline completed successfully using {pipeline_mode}!")
     return detection_results, masks, table_box, object_meshes, predicates
 
 def parse_args():
@@ -246,6 +269,10 @@ def parse_args():
     # Caching options
     parser.add_argument("--no-cache", action="store_true",
                        help="Disable caching of Gemini API calls")
+    
+    # API mode options
+    parser.add_argument("--separate-api-calls", action="store_true",
+                       help="Use separate API calls for detection and translation (default: use combined API)")
     
     # SAM configuration
     parser.add_argument("--sam-mode", type=str, choices=["local", "remote", "replicate"], default="local",
@@ -267,5 +294,6 @@ if __name__ == "__main__":
         sam_mode=args.sam_mode,
         sam_server_url=args.sam_server,
         sam_checkpoint=args.sam_checkpoint,
-        replicate_api_token=args.replicate_token
+        replicate_api_token=args.replicate_token,
+        use_combined_api=not args.separate_api_calls
     )

@@ -178,3 +178,102 @@ def translate_task(
     cache.put(cache_key, grounded_atoms)
     
     return grounded_atoms
+
+
+def detect_and_translate(
+    image: Image.Image,
+    task_instruction: str,
+    client: genai.Client | None = None,
+    model_id: str = "gemini-robotics-er-1.5-preview",
+    temperature: float | None = None,
+    use_cache: bool = True,
+    cache_dir: Optional[str] = None
+) -> Tuple[List[Dict], List[Dict]]:
+    """Detect objects and translate task in a single Gemini API call with caching support.
+    
+    Args:
+        image: The image to analyze.
+        task_instruction: The natural language task to translate.
+        client: Gemini API client. If None, a new client will be created.
+        model_id: Gemini model ID to use.
+        temperature: Temperature for generation.
+        use_cache: Whether to use caching.
+        cache_dir: Directory to store cache files. If None, a default directory will be used.
+        
+    Returns:
+        Tuple of (bboxes, grounded_atoms) where:
+        - bboxes: List of detected objects with bounding boxes
+        - grounded_atoms: List of predicate specifications
+    """
+    # Initialize cache
+    cache = GeminiCache(cache_dir=cache_dir, enabled=use_cache)
+    
+    # Create cache key based on image content, task, and model settings
+    cache_key = cache.compute_hash(image, task_instruction, model_id, temperature)
+    
+    # Try to get from cache first
+    cached_result = cache.get(cache_key)
+    if cached_result is not None:
+        return cached_result["bboxes"], cached_result["grounded_atoms"]
+    
+    # If not in cache, call the API
+    client = client if client is not None else setup_client()
+    
+    prompt = f"""
+    Perform two tasks on this image:
+
+    TASK 1 - OBJECT DETECTION:
+    Detect and return bounding boxes for objects in the image.
+    - DO NOT include the robot or robot gripper
+    - Limit to 25 objects
+    - If an object appears multiple times, name them by unique characteristics (color, size, position, etc.)
+    - Format: normalized coordinates 0-1000 as integers
+
+    TASK 2 - TASK TRANSLATION:
+    Translate this natural language instruction into formal predicates:
+    "{task_instruction}"
+
+    AVAILABLE PREDICATES:
+    - on(movable, surface): Object A is placed on top of object B
+
+    Return a single JSON object with this structure (no code fencing):
+    {{
+        "bboxes": [
+            {{"box_2d": [ymin, xmin, ymax, xmax], "label": "object name"}},
+            ...
+        ],
+        "predicates": [
+            {{"name": "predicate_name", "args": ["object1", "object2"]}},
+            ...
+        ]
+    }}
+
+    Use the object labels you detect in Task 1 when creating predicates in Task 2.
+    Only reference objects that you actually detected in the image.
+    """.strip()
+
+    response = client.models.generate_content(
+        model=model_id,
+        contents=[image, prompt],
+        config=types.GenerateContentConfig(
+            temperature=temperature, 
+            thinking_config=types.ThinkingConfig(thinking_budget=0)
+        ),
+    )
+    
+    result = load_json(response.text)
+    bboxes = result.get("bboxes", [])
+    predicate_specs = result.get("predicates", [])
+    
+    # Convert predicates to grounded atoms format
+    grounded_atoms = []
+    for spec in predicate_specs:
+        pred_name = spec.get("name", "")
+        args = spec.get("args", [])
+        if pred_name and args:
+            grounded_atoms.append({"predicate": pred_name, "args": args})
+    
+    # Cache the result
+    cache.put(cache_key, {"bboxes": bboxes, "grounded_atoms": grounded_atoms})
+    
+    return bboxes, grounded_atoms
