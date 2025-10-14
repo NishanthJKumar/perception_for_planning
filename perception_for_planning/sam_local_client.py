@@ -12,6 +12,7 @@ import logging
 import os
 import numpy as np
 import requests
+import torch.cuda
 from PIL import Image
 from typing import Dict, List, Optional, Tuple, Union
 from functools import cache
@@ -70,7 +71,7 @@ class SAMClient:
     def _init_local_predictor(self, checkpoint=None, model_type="vit_h", device=None):
         """Initialize a local SAM predictor."""
         if device is None:
-            device = "cuda" if os.environ.get("CUDA_VISIBLE_DEVICES") is not None else "cpu"
+            device = "cuda" if torch.cuda.is_available() else "cpu"
             
         try:
             # Try SAM2 first
