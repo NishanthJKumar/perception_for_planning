@@ -1,3 +1,4 @@
+import cv2
 import numpy as np
 from PIL import Image
 import supervision as sv
@@ -6,13 +7,13 @@ from matplotlib import pyplot as plt, patches
 
 def match_masks_to_bboxes(masks, bboxes, img_width, img_height):
     """Match masks to bounding boxes using IoU.
-    
+
     Args:
         masks: Boolean masks of shape (N, H, W)
         bboxes: List of bounding box dictionaries
         img_width: Width of the image
         img_height: Height of the image
-        
+
     Returns:
         List of mask indices that best match each bounding box
     """
@@ -33,35 +34,35 @@ def match_masks_to_bboxes(masks, bboxes, img_width, img_height):
             # If bbox format is invalid, use a dummy bbox
             print(f"Invalid bbox format for {bbox.get('label', 'unknown')}")
             bbox_coords.append([0, 0, 10, 10])  # Small dummy box to ensure lowest IoU
-    
+
     # Calculate IoU between each mask and each bbox to find best matches
     best_mask_indices = []
-    
+
     for bbox_idx, bbox_coord in enumerate(bbox_coords):
         x_min, y_min, x_max, y_max = bbox_coord
         # Create a binary mask for the bbox
         bbox_mask = np.zeros((masks.shape[1], masks.shape[2]), dtype=bool)
         bbox_mask[y_min:y_max, x_min:x_max] = True
-        
+
         # Calculate IoU for each mask with this bbox
         best_iou = -1
         best_idx = -1
-        
+
         for mask_idx, mask in enumerate(masks):
             # Skip if this mask has already been assigned
             if mask_idx in best_mask_indices:
                 continue
-            
+
             # Calculate intersection and union
             intersection = np.logical_and(mask, bbox_mask).sum()
             union = np.logical_or(mask, bbox_mask).sum()
             iou = intersection / union if union > 0 else 0
-            
+
             # Update if better IoU is found
             if iou > best_iou:
                 best_iou = iou
                 best_idx = mask_idx
-        
+
         if best_idx >= 0:
             best_mask_indices.append(best_idx)
         else:
@@ -75,7 +76,7 @@ def match_masks_to_bboxes(masks, bboxes, img_width, img_height):
                 print(f"No mask available for bbox {bbox_idx}")
                 # Use first mask as fallback (might be already used, but we need something)
                 best_mask_indices.append(0)
-    
+
     return best_mask_indices
 
 
@@ -138,7 +139,13 @@ def visualize_detections(
 
     # Save if output path provided
     if output_path:
-        plt.savefig(output_path, dpi=150, bbox_inches="tight")
+        # Use matplotlib's buffer to get the rendered image, then save with cv2 (much faster)
+        fig.canvas.draw()
+        buf = np.frombuffer(fig.canvas.buffer_rgba(), dtype=np.uint8)
+        buf = buf.reshape(fig.canvas.get_width_height()[::-1] + (4,))
+        # Convert RGBA to BGR for cv2
+        buf_bgr = cv2.cvtColor(buf, cv2.COLOR_RGBA2BGR)
+        cv2.imwrite(output_path, buf_bgr)
         print(f"Visualization saved to: {output_path}")
 
     # Show the plot
@@ -150,17 +157,17 @@ def visualize_detections(
 
 def visualize_masks(rgb_pil: Image.Image, masks: np.ndarray, bboxes: list[dict]) -> np.ndarray:
     """Visualize segmentation masks on an image.
-    
+
     Args:
         rgb_pil: Input RGB image
         masks: Segmentation masks of shape (N, 1, H, W)
         bboxes: List of bounding box dictionaries
-        
+
     Returns:
         Annotated image as numpy array
     """
     masks_sv = masks.squeeze(1).astype(bool)  # (num_masks, H, W)
-    
+
     # Handle case where we have more masks than bounding boxes
     if masks_sv.shape[0] > len(bboxes):
         print(f"More masks ({masks_sv.shape[0]}) than bounding boxes ({len(bboxes)}). Using IoU matching.")
@@ -168,13 +175,15 @@ def visualize_masks(rgb_pil: Image.Image, masks: np.ndarray, bboxes: list[dict])
         best_mask_indices = match_masks_to_bboxes(masks_sv, bboxes, rgb_pil.width, rgb_pil.height)
         # Keep only the matched masks
         masks_sv = masks_sv[best_mask_indices]
-    
+
     # Handle case where we have more bounding boxes than masks
     if len(bboxes) > masks_sv.shape[0]:
-        print(f"More bounding boxes ({len(bboxes)}) than masks ({masks_sv.shape[0]}). Some objects won't be visualized.")
+        print(
+            f"More bounding boxes ({len(bboxes)}) than masks ({masks_sv.shape[0]}). Some objects won't be visualized."
+        )
         # Truncate the bboxes list
-        bboxes = bboxes[:masks_sv.shape[0]]
-    
+        bboxes = bboxes[: masks_sv.shape[0]]
+
     # Extract bounding boxes from masks
     xyxy = []
     for mask in masks_sv:
