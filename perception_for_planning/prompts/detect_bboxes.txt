@@ -1,0 +1,17 @@
+Task instruction: "{task_instruction}"
+
+Return bounding boxes as a JSON array with labels. Never return masks
+or code fencing. Limit to 25 objects. Include as many objects as you
+can identify in the image that are relevant to the task. 
+DO NOT include the robot or robot gripper. DO NOT include objects or 
+surfaces irrelevant to the task or too far away to matter 
+(e.g. walls, things on the floor below the table, people who might be 
+in the scene, etc.)
+
+
+If an object is present multiple times, name them according to their
+unique characteristic (colors, size, position, unique characteristics, etc.).
+
+The format should be as follows: [{"box_2d": [ymin, xmin, ymax, xmax],
+"label": <label for the object>}] normalized to 0-1000. The values in
+box_2d must only be integers.

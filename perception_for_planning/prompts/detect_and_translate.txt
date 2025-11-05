@@ -1,0 +1,31 @@
+Perform two tasks on this image based on the task instruction: "{task_instruction}".
+
+TASK 1 - OBJECT DETECTION:
+Detect and return bounding boxes for objects in the image.
+- DO NOT include the robot, robot gripper, or table surface
+- DO NOT include objects or surfaces irrelevant to the task or too far away to matter (e.g. walls, things on the floor below the table, people who might be in the scene, etc.)
+- Limit to 25 objects
+- If an object appears multiple times, name them by unique characteristics (color, size, position, etc.)
+- Format: normalized coordinates 0-1000 as integers
+
+TASK 2 - TASK TRANSLATION:
+Translate this natural language instruction into formal predicates:
+
+
+AVAILABLE PREDICATES:
+- on(movable, surface): Object A is placed on top of object B
+
+Return a single JSON object with this structure (no code fencing):
+{{
+    "bboxes": [
+        {{"box_2d": [ymin, xmin, ymax, xmax], "label": "object name"}},
+        ...
+    ],
+    "predicates": [
+        {{"name": "predicate_name", "args": ["object1", "object2"]}},
+        ...
+    ]
+}}
+
+Use the object labels you detect in Task 1 when creating predicates in Task 2.
+Only reference objects that you actually detected in the image.

@@ -126,7 +126,7 @@ def segment_table_with_ransac(xyz_world: np.ndarray, rgb: np.ndarray, valid_mask
 
 def segment_pointcloud_by_masks(
     xyz_world: np.ndarray, rgb: np.ndarray, masks: np.ndarray, bboxes: list[dict],
-    project_points: bool = False
+    project_points: bool = False, return_pcd: bool = False
 ) -> dict[str, trimesh.Trimesh]:
     """Segment pointcloud using object masks.
     
@@ -141,6 +141,7 @@ def segment_pointcloud_by_masks(
         Dictionary mapping object labels to trimesh.Trimesh objects
     """
     object_meshes = {}
+    object_pcds = {}
     masks_2d = masks.squeeze(1).astype(bool)  # (num_objects, H, W)
     
     # Check that we have a structured pointcloud
@@ -246,6 +247,7 @@ def segment_pointcloud_by_masks(
 
         # Remove outliers
         pcd, _ = pcd.remove_statistical_outlier(nb_neighbors=10, std_ratio=2.0)
+        object_pcds[label] = pcd
 
         # Compute convex hull
         try:
@@ -278,7 +280,10 @@ def segment_pointcloud_by_masks(
         except Exception as e:
             _log.warning(f"Failed to create mesh for {label}: {e}")
 
-    return object_meshes
+    if return_pcd:
+        return object_meshes, object_pcds
+    else:
+        return object_meshes
 
 
 @cache
