@@ -1,9 +1,10 @@
 import logging
+from functools import cache
+from typing import Dict
+
 import numpy as np
 import open3d as o3d
 import trimesh
-from functools import cache
-from typing import Dict
 
 # Set up logging
 _log = logging.getLogger(__name__)
@@ -124,6 +125,23 @@ def segment_table_with_ransac(xyz_world: np.ndarray, rgb: np.ndarray, valid_mask
     return table_box
 
 
+
+def project_points_to_table(points: np.ndarray, colors: np.ndarray | None = None) -> tuple[np.ndarray, np.ndarray | None]:
+    # Find minimum z value (table level)
+    min_z = points[:, 2].min()
+
+    # Fallback: project all points down to minimum z
+    projected_points = points.copy()
+    projected_points[:, 2] = min_z
+    augmented_points = np.vstack([points, projected_points])
+    if colors is not None:
+        augmented_colors = np.vstack([colors, colors])
+    else:
+        augmented_colors = None
+
+    return augmented_points, augmented_colors
+
+
 def segment_pointcloud_by_masks(
     xyz_world: np.ndarray, rgb: np.ndarray, masks: np.ndarray, bboxes: list[dict],
     project_points: bool = False, return_pcd: bool = False
@@ -240,10 +258,12 @@ def segment_pointcloud_by_masks(
             _log.warning(f"Skipping {label}: too few points ({len(xyz_obj)})")
             continue
 
+        xyz_proj, rgb_proj = project_points_to_table(xyz_obj, rgb_obj)
+
         # Create Open3D point cloud
         pcd = o3d.geometry.PointCloud()
-        pcd.points = o3d.utility.Vector3dVector(xyz_obj)
-        pcd.colors = o3d.utility.Vector3dVector(rgb_obj)
+        pcd.points = o3d.utility.Vector3dVector(xyz_proj)
+        pcd.colors = o3d.utility.Vector3dVector(rgb_proj)
 
         # Remove outliers
         pcd, _ = pcd.remove_statistical_outlier(nb_neighbors=10, std_ratio=2.0)

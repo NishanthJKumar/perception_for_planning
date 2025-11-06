@@ -1,16 +1,17 @@
 import json
+import logging
 import os
 from functools import cache
 from typing import Optional, Dict, List, Tuple
 
-import numpy as np
 from PIL import Image
 from google import genai
 from google.genai import types
-from matplotlib import pyplot as plt, patches
 
 # Import the caching utility
 from .gemini_cache import GeminiCache
+
+_log = logging.getLogger(__name__)
 
 
 @cache
@@ -41,7 +42,11 @@ def load_json(response_text: str) -> list | dict:
     elif cleaned_text.startswith("```"):
         cleaned_text = cleaned_text.replace("```", "")
 
-    results = json.loads(cleaned_text)
+    try:
+        results = json.loads(cleaned_text)
+    except json.decoder.JSONDecodeError:
+        _log.error(f"Invalid JSON: {cleaned_text}")
+        raise
     return results
 
 
@@ -52,7 +57,7 @@ def detect_bboxes(
     model_id: str = "gemini-robotics-er-1.5-preview",
     temperature: float | None = None,
     use_cache: bool = True,
-    cache_dir: Optional[str] = None
+    cache_dir: Optional[str] = None,
 ) -> list:
     """Detect objects in an image using Gemini API with caching support.
 
@@ -73,12 +78,12 @@ def detect_bboxes(
 
     # Create cache key based on image content, task instruction, and model settings
     cache_key = cache.compute_hash(image, task_instruction, model_id, temperature)
-    
+
     # Try to get from cache first
     cached_result = cache.get(cache_key)
     if cached_result is not None:
         return cached_result
-        
+
     # If not in cache, call the API
     client = client if client is not None else setup_client()
     prompt_template = load_prompt("detect_bboxes")
@@ -92,47 +97,47 @@ def detect_bboxes(
         ),
     )
     bbox_list: list = load_json(response.text)
-    
+
     # Cache the result
     cache.put(cache_key, bbox_list)
-    
+
     return bbox_list
 
 
 def translate_task(
-    task_instruction: str, 
-    bboxes: list[dict], 
+    task_instruction: str,
+    bboxes: list[dict],
     bbox_viz_path: str,
     use_cache: bool = True,
-    cache_dir: Optional[str] = None
+    cache_dir: Optional[str] = None,
 ) -> list[dict]:
     """Translate a natural language task into formal predicates using Gemini API with caching support.
-    
+
     Args:
         task_instruction: The natural language task to translate.
         bboxes: List of bounding boxes with labels.
         bbox_viz_path: Path to the image with labeled bounding boxes.
         use_cache: Whether to use caching.
         cache_dir: Directory to store cache files. If None, a default directory will be used.
-        
+
     Returns:
         List of predicate specifications.
     """
     # Initialize cache
     cache = GeminiCache(cache_dir=cache_dir, enabled=use_cache)
-    
+
     # Load the image to compute the hash
     labeled_image = Image.open(bbox_viz_path)
-    
+
     # Create cache key based on task instruction, bboxes, and image content
     bbox_labels = [bbox["label"] for bbox in bboxes]
     cache_key = cache.compute_hash(task_instruction, bbox_labels, labeled_image)
-    
+
     # Try to get from cache first
     cached_result = cache.get(cache_key)
     if cached_result is not None:
         return cached_result
-    
+
     # If not in cache, call the API
     client = setup_client()
 
@@ -155,10 +160,10 @@ def translate_task(
         args = spec.get("args", [])
         if pred_name and args:
             grounded_atoms.append({"predicate": pred_name, "args": args})
-    
+
     # Cache the result
     cache.put(cache_key, grounded_atoms)
-    
+
     return grounded_atoms
 
 
@@ -169,10 +174,10 @@ def detect_and_translate(
     model_id: str = "gemini-robotics-er-1.5-preview",
     temperature: float | None = None,
     use_cache: bool = True,
-    cache_dir: Optional[str] = None
+    cache_dir: Optional[str] = None,
 ) -> Tuple[List[Dict], List[Dict]]:
     """Detect objects and translate task in a single Gemini API call with caching support.
-    
+
     Args:
         image: The image to analyze.
         task_instruction: The natural language task to translate.
@@ -181,7 +186,7 @@ def detect_and_translate(
         temperature: Temperature for generation.
         use_cache: Whether to use caching.
         cache_dir: Directory to store cache files. If None, a default directory will be used.
-        
+
     Returns:
         Tuple of (bboxes, grounded_atoms) where:
         - bboxes: List of detected objects with bounding boxes
@@ -189,15 +194,15 @@ def detect_and_translate(
     """
     # Initialize cache
     cache = GeminiCache(cache_dir=cache_dir, enabled=use_cache)
-    
+
     # Create cache key based on image content, task, and model settings
     cache_key = cache.compute_hash(image, task_instruction, model_id, temperature)
-    
+
     # Try to get from cache first
     cached_result = cache.get(cache_key)
     if cached_result is not None:
         return cached_result["bboxes"], cached_result["grounded_atoms"]
-    
+
     # If not in cache, call the API
     client = client if client is not None else setup_client()
 
@@ -209,15 +214,14 @@ def detect_and_translate(
         model=model_id,
         contents=[image, prompt],
         config=types.GenerateContentConfig(
-            temperature=temperature, 
-            thinking_config=types.ThinkingConfig(thinking_budget=0)
+            temperature=temperature, thinking_config=types.ThinkingConfig(thinking_budget=0)
         ),
     )
-    
+
     result = load_json(response.text)
     bboxes = result.get("bboxes", [])
     predicate_specs = result.get("predicates", [])
-    
+
     # Convert predicates to grounded atoms format
     grounded_atoms = []
     for spec in predicate_specs:
@@ -225,8 +229,8 @@ def detect_and_translate(
         args = spec.get("args", [])
         if pred_name and args:
             grounded_atoms.append({"predicate": pred_name, "args": args})
-    
+
     # Cache the result
     cache.put(cache_key, {"bboxes": bboxes, "grounded_atoms": grounded_atoms})
-    
+
     return bboxes, grounded_atoms
