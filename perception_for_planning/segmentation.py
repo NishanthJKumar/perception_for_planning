@@ -2,6 +2,7 @@ import logging
 from functools import cache
 from typing import Dict
 
+import cv2
 import numpy as np
 import open3d as o3d
 import trimesh
@@ -144,17 +145,19 @@ def project_points_to_table(points: np.ndarray, colors: np.ndarray | None = None
 
 def segment_pointcloud_by_masks(
     xyz_world: np.ndarray, rgb: np.ndarray, masks: np.ndarray, bboxes: list[dict],
-    max_z: float, return_pcd: bool = False
+    max_z: float, return_pcd: bool = False, erode_pixels: int = 0
 ) -> dict[str, trimesh.Trimesh]:
     """Segment pointcloud using object masks.
-    
+
     Args:
         xyz_world: Point cloud in world frame with shape (H, W, 3) matching the masks
         rgb: RGB colors corresponding to the point cloud with shape (H, W, 3)
         masks: (num_objects, 1, H, W) segmentation masks from SAM
         bboxes: List of bbox dictionaries with 'label' and 'box_2d' keys
-        project_points: Unused parameter, kept for backward compatibility
-    
+        max_z: Maximum z value for filtering points
+        return_pcd: Whether to return point clouds in addition to meshes
+        erode_pixels: Number of pixels to erode the mask by to handle depth edge noise. Default is 0 (no erosion).
+
     Returns:
         Dictionary mapping object labels to trimesh.Trimesh objects
     """
@@ -245,7 +248,11 @@ def segment_pointcloud_by_masks(
     for mask_2d, bbox in zip(masks_2d, bboxes):
         label = bbox["label"]
 
-        # TODO: might need to erode the mask to account for edge noise
+        # Erode the mask to handle depth edge noise
+        if erode_pixels > 0:
+            kernel = np.ones((erode_pixels * 2 + 1, erode_pixels * 2 + 1), np.uint8)
+            mask_2d = cv2.erode(mask_2d.astype(np.uint8), kernel, iterations=1).astype(bool)
+
         # Get points for this object using the mask
         xyz_obj = xyz_world[mask_2d]
         rgb_obj = rgb[mask_2d]
