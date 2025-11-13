@@ -12,6 +12,6 @@ in the scene, etc.)
 If an object is present multiple times, name them according to their
 unique characteristic (colors, size, position, unique characteristics, etc.).
 
-The format should be as follows: [{"box_2d": [ymin, xmin, ymax, xmax],
-"label": <label for the object>}] normalized to 0-1000. The values in
+The format should be as follows: [{{"box_2d": [ymin, xmin, ymax, xmax],
+"label": <label for the object>}}] normalized to 0-1000. The values in
 box_2d must only be integers.
