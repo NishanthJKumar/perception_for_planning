@@ -144,7 +144,7 @@ def project_points_to_table(points: np.ndarray, colors: np.ndarray | None = None
 
 def segment_pointcloud_by_masks(
     xyz_world: np.ndarray, rgb: np.ndarray, masks: np.ndarray, bboxes: list[dict],
-    project_points: bool = False, return_pcd: bool = False
+    max_z: float, return_pcd: bool = False
 ) -> dict[str, trimesh.Trimesh]:
     """Segment pointcloud using object masks.
     
@@ -245,6 +245,7 @@ def segment_pointcloud_by_masks(
     for mask_2d, bbox in zip(masks_2d, bboxes):
         label = bbox["label"]
 
+        # TODO: might need to erode the mask to account for edge noise
         # Get points for this object using the mask
         xyz_obj = xyz_world[mask_2d]
         rgb_obj = rgb[mask_2d]
@@ -258,7 +259,8 @@ def segment_pointcloud_by_masks(
             _log.warning(f"Skipping {label}: too few points ({len(xyz_obj)})")
             continue
 
-        xyz_proj, rgb_proj = project_points_to_table(xyz_obj, rgb_obj)
+        z_mask = xyz_obj[..., 2] > max_z
+        xyz_proj, rgb_proj = project_points_to_table(xyz_obj[z_mask], rgb_obj[z_mask])
 
         # Create Open3D point cloud
         pcd = o3d.geometry.PointCloud()
