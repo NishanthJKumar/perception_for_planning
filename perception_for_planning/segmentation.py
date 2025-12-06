@@ -101,10 +101,23 @@ def segment_table_with_ransac(xyz_world: np.ndarray, rgb: np.ndarray, valid_mask
     plane_model, table_idxs = pcd.segment_plane(distance_threshold=0.01, ransac_n=3, num_iterations=1000)
     table_pcd = pcd.select_by_index(table_idxs)
 
-    # Get table AABB and surface height
-    table_aabb_o3d = table_pcd.get_axis_aligned_bounding_box()
-    table_aabb = np.stack([table_aabb_o3d.min_bound, table_aabb_o3d.max_bound])
-    surface_z = np.asarray(table_pcd.points)[:, 2].mean()
+    # Remove statistical outliers to eliminate distant points that happen to lie on the plane
+    table_pcd, inlier_idxs = table_pcd.remove_statistical_outlier(nb_neighbors=20, std_ratio=2.0)
+
+    # Get table AABB using percentile-based bounds to handle remaining outliers
+    table_pts = np.asarray(table_pcd.points)
+    # Use 2nd and 98th percentiles for XY to avoid extreme outliers while keeping most of table
+    xy_min = np.percentile(table_pts[:, :2], 2, axis=0)
+    xy_max = np.percentile(table_pts[:, :2], 98, axis=0)
+    # Use actual min/max for Z since height is well-defined by RANSAC
+    z_min = table_pts[:, 2].min()
+    z_max = table_pts[:, 2].max()
+
+    table_aabb = np.stack([
+        np.append(xy_min, z_min),
+        np.append(xy_max, z_max)
+    ])
+    surface_z = table_pts[:, 2].mean()
 
     # Create table box
     table_box = aabb_to_cuboid(table_aabb, "table")

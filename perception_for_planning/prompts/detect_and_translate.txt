@@ -9,6 +9,9 @@ Detect and return bounding boxes for objects in the image.
 - An object **cannot have the same name** as another under any circumstance.
 - Format: normalized coordinates 0-1000 as integers
 
+Be very careful to identify objects and name them in a way that's relevant to the task. If the task involves picking up a red apple, make sure that 'red' appears in the name of the apple.
+
+
 TASK 2 - TASK TRANSLATION:
 Translate this natural language instruction into some conjunction of formal predicates:
 
@@ -25,6 +28,7 @@ For instance - for the task "throw away the trash in the bin" when there is a bi
 ]
 
 This is because only the chips and soda are empty and clearly trash. Everything else is still usable!
+
 
 Return a single JSON object with this structure (no code fencing):
 {{
