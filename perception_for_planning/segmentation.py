@@ -1,9 +1,11 @@
 import logging
+from functools import cache
+from typing import Dict
+
+import cv2
 import numpy as np
 import open3d as o3d
 import trimesh
-from functools import cache
-from typing import Dict
 
 # Set up logging
 _log = logging.getLogger(__name__)
@@ -99,10 +101,23 @@ def segment_table_with_ransac(xyz_world: np.ndarray, rgb: np.ndarray, valid_mask
     plane_model, table_idxs = pcd.segment_plane(distance_threshold=0.01, ransac_n=3, num_iterations=1000)
     table_pcd = pcd.select_by_index(table_idxs)
 
-    # Get table AABB and surface height
-    table_aabb_o3d = table_pcd.get_axis_aligned_bounding_box()
-    table_aabb = np.stack([table_aabb_o3d.min_bound, table_aabb_o3d.max_bound])
-    surface_z = np.asarray(table_pcd.points)[:, 2].mean()
+    # Remove statistical outliers to eliminate distant points that happen to lie on the plane
+    table_pcd, inlier_idxs = table_pcd.remove_statistical_outlier(nb_neighbors=20, std_ratio=2.0)
+
+    # Get table AABB using percentile-based bounds to handle remaining outliers
+    table_pts = np.asarray(table_pcd.points)
+    # Use 2nd and 98th percentiles for XY to avoid extreme outliers while keeping most of table
+    xy_min = np.percentile(table_pts[:, :2], 2, axis=0)
+    xy_max = np.percentile(table_pts[:, :2], 98, axis=0)
+    # Use actual min/max for Z since height is well-defined by RANSAC
+    z_min = table_pts[:, 2].min()
+    z_max = table_pts[:, 2].max()
+
+    table_aabb = np.stack([
+        np.append(xy_min, z_min),
+        np.append(xy_max, z_max)
+    ])
+    surface_z = table_pts[:, 2].mean()
 
     # Create table box
     table_box = aabb_to_cuboid(table_aabb, "table")
@@ -124,23 +139,43 @@ def segment_table_with_ransac(xyz_world: np.ndarray, rgb: np.ndarray, valid_mask
     return table_box
 
 
+
+def project_points_to_table(points: np.ndarray, colors: np.ndarray | None = None) -> tuple[np.ndarray, np.ndarray | None]:
+    # Find minimum z value (table level)
+    min_z = points[:, 2].min()
+
+    # Fallback: project all points down to minimum z
+    projected_points = points.copy()
+    projected_points[:, 2] = min_z
+    augmented_points = np.vstack([points, projected_points])
+    if colors is not None:
+        augmented_colors = np.vstack([colors, colors])
+    else:
+        augmented_colors = None
+
+    return augmented_points, augmented_colors
+
+
 def segment_pointcloud_by_masks(
     xyz_world: np.ndarray, rgb: np.ndarray, masks: np.ndarray, bboxes: list[dict],
-    project_points: bool = False
+    max_z: float, return_pcd: bool = False, erode_pixels: int = 0
 ) -> dict[str, trimesh.Trimesh]:
     """Segment pointcloud using object masks.
-    
+
     Args:
         xyz_world: Point cloud in world frame with shape (H, W, 3) matching the masks
         rgb: RGB colors corresponding to the point cloud with shape (H, W, 3)
         masks: (num_objects, 1, H, W) segmentation masks from SAM
         bboxes: List of bbox dictionaries with 'label' and 'box_2d' keys
-        project_points: Unused parameter, kept for backward compatibility
-    
+        max_z: Maximum z value for filtering points
+        return_pcd: Whether to return point clouds in addition to meshes
+        erode_pixels: Number of pixels to erode the mask by to handle depth edge noise. Default is 0 (no erosion).
+
     Returns:
         Dictionary mapping object labels to trimesh.Trimesh objects
     """
     object_meshes = {}
+    object_pcds = {}
     masks_2d = masks.squeeze(1).astype(bool)  # (num_objects, H, W)
     
     # Check that we have a structured pointcloud
@@ -226,6 +261,11 @@ def segment_pointcloud_by_masks(
     for mask_2d, bbox in zip(masks_2d, bboxes):
         label = bbox["label"]
 
+        # Erode the mask to handle depth edge noise
+        if erode_pixels > 0:
+            kernel = np.ones((erode_pixels * 2 + 1, erode_pixels * 2 + 1), np.uint8)
+            mask_2d = cv2.erode(mask_2d.astype(np.uint8), kernel, iterations=1).astype(bool)
+
         # Get points for this object using the mask
         xyz_obj = xyz_world[mask_2d]
         rgb_obj = rgb[mask_2d]
@@ -239,13 +279,17 @@ def segment_pointcloud_by_masks(
             _log.warning(f"Skipping {label}: too few points ({len(xyz_obj)})")
             continue
 
+        z_mask = xyz_obj[..., 2] > max_z
+        xyz_proj, rgb_proj = project_points_to_table(xyz_obj[z_mask], rgb_obj[z_mask])
+
         # Create Open3D point cloud
         pcd = o3d.geometry.PointCloud()
-        pcd.points = o3d.utility.Vector3dVector(xyz_obj)
-        pcd.colors = o3d.utility.Vector3dVector(rgb_obj)
+        pcd.points = o3d.utility.Vector3dVector(xyz_proj)
+        pcd.colors = o3d.utility.Vector3dVector(rgb_proj)
 
         # Remove outliers
         pcd, _ = pcd.remove_statistical_outlier(nb_neighbors=10, std_ratio=2.0)
+        object_pcds[label] = pcd
 
         # Compute convex hull
         try:
@@ -278,7 +322,10 @@ def segment_pointcloud_by_masks(
         except Exception as e:
             _log.warning(f"Failed to create mesh for {label}: {e}")
 
-    return object_meshes
+    if return_pcd:
+        return object_meshes, object_pcds
+    else:
+        return object_meshes
 
 
 @cache

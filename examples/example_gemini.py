@@ -100,7 +100,7 @@ def main(
         # ORIGINAL: Separate API calls for detection and translation
         # 2. Run object detection using Gemini Vision API
         _log.info(f"Running object detection with Gemini Vision API (cache {cache_status})")
-        detection_results = detect_bboxes(rgb_img, client, use_cache=use_cache)
+        detection_results = detect_bboxes(rgb_img, task_instruction, client, use_cache=use_cache)
         _log.info(f"Detected {len(detection_results)} objects")
         # Note: predicates will be generated later in step 6
         predicates = None

@@ -1,0 +1,22 @@
+You are viewing an image with labeled objects and need to translate a natural language task into formal predicates.
+
+TASK: {task_instruction}
+
+AVAILABLE OBJECTS (with their labels visible in the image):
+{object_list}
+
+AVAILABLE PREDICATES:
+- on(movable, surface): Object A is placed on top of object B
+
+Please analyze the task and return a JSON list of predicates that represent the goal state.
+Each predicate should specify:
+- "name": the predicate name (e.g., "on")
+- "args": list of object labels that should be arguments (e.g., ["red_cup", "table"])
+
+For example, if the task is "put the red cup on the table", you might return:
+[{"name": "on", "args": ["red cup", "table"]}]
+
+Look carefully at the labeled image to identify the specific objects mentioned in the task.
+Only use object labels that are visible in the image.
+
+Return your response as a JSON array (no code fencing):

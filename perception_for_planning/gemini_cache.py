@@ -4,7 +4,6 @@ Simple caching utility for Gemini API responses
 import hashlib
 import io
 import json
-import os
 import pickle
 from pathlib import Path
 from typing import Any, Optional
