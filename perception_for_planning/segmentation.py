@@ -141,10 +141,19 @@ def segment_table_with_ransac(xyz_world: np.ndarray, rgb: np.ndarray, valid_mask
 
 
 def project_points_to_table(points: np.ndarray, colors: np.ndarray | None = None) -> tuple[np.ndarray, np.ndarray | None]:
+    """
+    Project a set of 3D points down to the table level (minimum z value) and augment the original points with these projections.
+    Args:
+        points: np.ndarray of shape (N, 3). The original 3D points in world coordinates.
+        colors: Optional[np.ndarray] of shape (N, 3) or (N, 4). The RGB(A) colors associated with each point.
+    Returns:
+        augmented_points: np.ndarray of shape (2N, 3). The original points stacked with their projections onto the table plane (z = min_z).
+        augmented_colors: np.ndarray of shape (2N, 3) or (2N, 4), or None. The original colors stacked with themselves, or None if no colors were provided.
+    The function is useful for visualizing or processing both the original points and their projections onto the table surface, for example to aid in segmentation or visualization tasks.
+    """
     # Find minimum z value (table level)
     min_z = points[:, 2].min()
 
-    # Fallback: project all points down to minimum z
     projected_points = points.copy()
     projected_points[:, 2] = min_z
     augmented_points = np.vstack([points, projected_points])
@@ -159,7 +168,7 @@ def project_points_to_table(points: np.ndarray, colors: np.ndarray | None = None
 def segment_pointcloud_by_masks(
     xyz_world: np.ndarray, rgb: np.ndarray, masks: np.ndarray, bboxes: list[dict],
     max_z: float, return_pcd: bool = False, erode_pixels: int = 0
-) -> dict[str, trimesh.Trimesh]:
+) -> dict[str, trimesh.Trimesh] | tuple[dict[str, trimesh.Trimesh], dict]:
     """Segment pointcloud using object masks.
 
     Args:
