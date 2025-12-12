@@ -24,7 +24,7 @@ def load_prompt(prompt_name: str) -> str:
 
 
 @cache
-def setup_client() -> genai.Client:
+def gemini_client() -> genai.Client:
     api_key = os.getenv("GOOGLE_API_KEY")
     if not api_key:
         raise ValueError(
@@ -85,7 +85,7 @@ def detect_bboxes(
         return cached_result
 
     # If not in cache, call the API
-    client = client if client is not None else setup_client()
+    client = client if client is not None else gemini_client()
     prompt_template = load_prompt("detect_bboxes")
     prompt = prompt_template.format(task_instruction=task_instruction)
 
@@ -139,7 +139,7 @@ def translate_task(
         return cached_result
 
     # If not in cache, call the API
-    client = setup_client()
+    client = gemini_client()
 
     # Load prompt template and format with task-specific values
     prompt_template = load_prompt("translate_task")
@@ -204,7 +204,7 @@ def detect_and_translate(
         return cached_result["bboxes"], cached_result["grounded_atoms"]
 
     # If not in cache, call the API
-    client = client if client is not None else setup_client()
+    client = client if client is not None else gemini_client()
 
     # Load prompt template and format with task-specific values
     prompt_template = load_prompt("detect_and_translate")

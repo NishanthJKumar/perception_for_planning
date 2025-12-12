@@ -27,7 +27,7 @@ import open3d as o3d
 from pathlib import Path
 from scipy.spatial import cKDTree  # For point cloud projection
 
-from perception_for_planning.gemini import setup_client, detect_bboxes, translate_task, detect_and_translate
+from perception_for_planning.gemini import gemini_client, detect_bboxes, translate_task, detect_and_translate
 from perception_for_planning.visualization import visualize_detections, visualize_masks
 from perception_for_planning.segmentation import segment_table_with_ransac, segment_objects, segment_pointcloud_by_masks, save_meshes
 
@@ -83,7 +83,7 @@ def main(
     _log.info(f"Loaded RGB image: {rgb_np.shape}, depth image: {depth_np.shape}, pointcloud: {xyz.shape}")
 
     cache_status = "enabled" if use_cache else "disabled"
-    client = setup_client()
+    client = gemini_client()
     
     if use_combined_api:
         # NEW: Use combined API call for both detection and translation
