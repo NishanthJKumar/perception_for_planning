@@ -79,9 +79,10 @@ sam-server = [
 
 [tool.setuptools]
 packages = ["perception_for_planning"]
+include-package-data = true
 
 [tool.setuptools.package-data]
-perception_for_planning = ["py.typed"]
+perception_for_planning = ["py.typed", "prompts/*.txt"]
 
 [tool.black]
 line-length = 100
