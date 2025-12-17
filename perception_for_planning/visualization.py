@@ -144,10 +144,8 @@ def visualize_detections(
     buf = buf.reshape(fig.canvas.get_width_height()[::-1] + (4,))
     # Convert RGBA to BGR for cv2
     buf_bgr = cv2.cvtColor(buf, cv2.COLOR_RGBA2BGR)
-
     if output_path:
         cv2.imwrite(output_path, buf_bgr)
-        print(f"Visualization saved to: {output_path}")
 
     # Show the plot
     if show_plot:
