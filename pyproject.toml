@@ -51,15 +51,7 @@ dependencies = [
     
     # API integrations
     "replicate>=0.18.0",    # For SAM-2 via Replicate API
-]
 
-[project.urls]
-"Bug Reports" = "https://github.com/NishanthJKumar/perception_for_planning/issues"
-"Source" = "https://github.com/NishanthJKumar/perception_for_planning"
-"Documentation" = "https://ai.google.dev/gemini-api/docs/robotics-overview"
-
-[project.optional-dependencies]
-sam-server = [
     # SAM2 model dependencies
     "SAM-2 @ git+https://github.com/facebookresearch/segment-anything-2.git",
     
@@ -71,11 +63,12 @@ sam-server = [
     # PyTorch (for SAM2 model)
     "torch>=2.0.0",
     "torchvision>=0.15.0",
-    
-    # Additional dependencies for SAM2 server
-    "numpy>=1.21.0",
-    "Pillow>=9.0.0",
 ]
+
+[project.urls]
+"Bug Reports" = "https://github.com/NishanthJKumar/perception_for_planning/issues"
+"Source" = "https://github.com/NishanthJKumar/perception_for_planning"
+"Documentation" = "https://ai.google.dev/gemini-api/docs/robotics-overview"
 
 [tool.setuptools]
 packages = ["perception_for_planning"]
