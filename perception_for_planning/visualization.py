@@ -81,11 +81,11 @@ def match_masks_to_bboxes(masks, bboxes, img_width, img_height):
 
 
 def visualize_detections(
-    image: Image.Image, results: list[dict], output_path: str | None = None, show_plot: bool = True
-) -> tuple:
+    image: Image.Image, results: list[dict], output_path: str | None = None, show_plot: bool = False
+) -> np.ndarray | None:
     if not results:
         print("No results to visualize")
-        return None, None
+        return None
 
     # Convert PIL image to numpy array for matplotlib
     img_array = np.array(image)
@@ -138,21 +138,20 @@ def visualize_detections(
     plt.tight_layout()
 
     # Save if output path provided
+    # Use matplotlib's buffer to get the rendered image, then save with cv2 (much faster)
+    fig.canvas.draw()
+    buf = np.frombuffer(fig.canvas.buffer_rgba(), dtype=np.uint8)
+    buf = buf.reshape(fig.canvas.get_width_height()[::-1] + (4,))
     if output_path:
-        # Use matplotlib's buffer to get the rendered image, then save with cv2 (much faster)
-        fig.canvas.draw()
-        buf = np.frombuffer(fig.canvas.buffer_rgba(), dtype=np.uint8)
-        buf = buf.reshape(fig.canvas.get_width_height()[::-1] + (4,))
-        # Convert RGBA to BGR for cv2
+        # Convert RGBA to BGR for cv2 only when saving to disk
         buf_bgr = cv2.cvtColor(buf, cv2.COLOR_RGBA2BGR)
         cv2.imwrite(output_path, buf_bgr)
-        print(f"Visualization saved to: {output_path}")
 
     # Show the plot
     if show_plot:
         plt.show()
 
-    return fig, ax
+    return buf[..., :3]
 
 
 def visualize_masks(rgb_pil: Image.Image, masks: np.ndarray, bboxes: list[dict]) -> np.ndarray:

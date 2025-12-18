@@ -289,7 +289,7 @@ def segment_pointcloud_by_masks(
             continue
 
         z_mask = xyz_obj[..., 2] > max_z
-        if z_mask.sum() < 0:
+        if z_mask.sum() == 0:
             _log.warning(f"{label} had no points after masking out points with z > {max_z}")
             continue
         xyz_proj, rgb_proj = project_points_to_table(xyz_obj[z_mask], rgb_obj[z_mask])

@@ -234,3 +234,56 @@ def detect_and_translate(
     cache.put(cache_key, {"bboxes": bboxes, "grounded_atoms": grounded_atoms})
 
     return bboxes, grounded_atoms
+
+
+
+async def detect_and_translate_async(
+    image: Image.Image,
+    task_instruction: str,
+    client: genai.Client | None = None,
+    model_id: str = "gemini-robotics-er-1.5-preview",
+    temperature: float | None = None,
+) -> Tuple[List[Dict], List[Dict]]:
+    """Asynchronously detect objects and translate task in a single Gemini API call.
+
+    This is the asynchronous counterpart to :func:`detect_and_translate`, providing
+    the same functionality using the async Gemini client.
+
+    Args:
+        image: The image to analyze.
+        task_instruction: The natural language task to translate.
+        client: Gemini API client. If None, a new client will be created.
+        model_id: Gemini model ID to use.
+        temperature: Temperature for generation.
+
+    Returns:
+        Tuple of (bboxes, grounded_atoms) where:
+        - bboxes: List of detected objects with bounding boxes.
+        - grounded_atoms: List of predicate specifications.
+    """
+    client = client if client is not None else gemini_client()
+
+    # Load prompt template and format with task-specific values
+    prompt_template = load_prompt("detect_and_translate")
+    prompt = prompt_template.format(task_instruction=task_instruction)
+
+    response = await client.aio.models.generate_content(
+        model=model_id,
+        contents=[image, prompt],
+        config=types.GenerateContentConfig(
+            temperature=temperature, thinking_config=types.ThinkingConfig(thinking_budget=0)
+        ),
+    )
+    result = load_json(response.text)
+    bboxes = result.get("bboxes", [])
+    predicate_specs = result.get("predicates", [])
+
+    # Convert predicates to grounded atoms format
+    grounded_atoms = []
+    for spec in predicate_specs:
+        pred_name = spec.get("name", "")
+        args = spec.get("args", [])
+        if pred_name and args:
+            grounded_atoms.append({"predicate": pred_name, "args": args})
+
+    return bboxes, grounded_atoms
