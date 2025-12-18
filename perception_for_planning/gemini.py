@@ -244,6 +244,23 @@ async def detect_and_translate_async(
     model_id: str = "gemini-robotics-er-1.5-preview",
     temperature: float | None = None,
 ) -> Tuple[List[Dict], List[Dict]]:
+    """Asynchronously detect objects and translate task in a single Gemini API call.
+
+    This is the asynchronous counterpart to :func:`detect_and_translate`, providing
+    the same functionality using the async Gemini client.
+
+    Args:
+        image: The image to analyze.
+        task_instruction: The natural language task to translate.
+        client: Gemini API client. If None, a new client will be created.
+        model_id: Gemini model ID to use.
+        temperature: Temperature for generation.
+
+    Returns:
+        Tuple of (bboxes, grounded_atoms) where:
+        - bboxes: List of detected objects with bounding boxes.
+        - grounded_atoms: List of predicate specifications.
+    """
     client = client if client is not None else gemini_client()
 
     # Load prompt template and format with task-specific values
