@@ -142,9 +142,9 @@ def visualize_detections(
     fig.canvas.draw()
     buf = np.frombuffer(fig.canvas.buffer_rgba(), dtype=np.uint8)
     buf = buf.reshape(fig.canvas.get_width_height()[::-1] + (4,))
-    # Convert RGBA to BGR for cv2
-    buf_bgr = cv2.cvtColor(buf, cv2.COLOR_RGBA2BGR)
     if output_path:
+        # Convert RGBA to BGR for cv2 only when saving to disk
+        buf_bgr = cv2.cvtColor(buf, cv2.COLOR_RGBA2BGR)
         cv2.imwrite(output_path, buf_bgr)
 
     # Show the plot
