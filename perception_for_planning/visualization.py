@@ -82,7 +82,7 @@ def match_masks_to_bboxes(masks, bboxes, img_width, img_height):
 
 def visualize_detections(
     image: Image.Image, results: list[dict], output_path: str | None = None, show_plot: bool = False
-) -> np.ndarray:
+) -> np.ndarray | None:
     if not results:
         print("No results to visualize")
         return None
